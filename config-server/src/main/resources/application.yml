@@ -1,0 +1,15 @@
+server:
+  port: 8880
+
+spring:
+  application:
+    name: config-server
+
+  cloud:
+    config:
+      server:
+        git:
+          uri: git@github.com:aboubakardiakite/config-server-archi-micro.git
+          default-label: main
+
+
