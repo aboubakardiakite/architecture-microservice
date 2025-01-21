@@ -42,4 +42,9 @@ public class UserController {
         userService.deleteUser(id);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/{id}/can-borrow")
+    public boolean canBorrow(@PathVariable Long id) {
+        return userService.canBorrow(id);
+    }
 } 

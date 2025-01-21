@@ -1,7 +1,9 @@
 package com.diakite.userservice.service;
 
+import com.diakite.userservice.client.RestClient;
 import com.diakite.userservice.entity.User;
 import com.diakite.userservice.entity.MembershipType;
+import com.diakite.userservice.kafka.UserKafkaProducer;
 import com.diakite.userservice.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,15 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
+
+    @Autowired
+    private RestClient restClient;
+
+    @Autowired
+    private UserKafkaProducer kafkaProducer;
+    @Autowired
+    private UserKafkaProducer userKafkaProducer;
+
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
@@ -23,14 +34,13 @@ public class UserService {
     }
 
     public User createUser(User user) {
-        int maxBooks = (user.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
-        
+
         User newUser = new User.UserBuilder()
                 .name(user.getName())
                 .email(user.getEmail())
                 .membershipType(user.getMembershipType())
                 .build();
-                
+
         return userRepository.save(newUser);
     }
 
@@ -46,14 +56,21 @@ public class UserService {
                     // Mise à jour du nombre max d'emprunts selon le type d'adhésion
                     int maxBooks = (user.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
                     existingUser.setNombreMaxEmprunt(maxBooks);
-                    
+
+                    userKafkaProducer.sendUserUpdateEvent(id);
+
                     return userRepository.save(existingUser);
                 })
                 .orElse(null);
     }
 
     public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+
+        userRepository.findById(id).ifPresent(user -> {
+            userRepository.deleteUserById(user.getId());
+            kafkaProducer.sendUserDeleteEvent(id);
+        });
+
     }
 
     public boolean canBorrow(Long userId) {
@@ -76,4 +93,20 @@ public class UserService {
             userRepository.save(user);
         });
     }
-} 
+
+    public void unBorrowBook(Long userId) {
+
+        userRepository.findById(userId).ifPresent(user -> {
+            int currentBooks = user.getCurrentBorrowedBooks() - 1;
+            user.setCurrentBorrowedBooks(currentBooks);
+
+            // Déverrouiller l'utilisateur s'il était bloqué
+            if (user.isLocked() && currentBooks < user.getNombreMaxEmprunt()) {
+                user.setLocked(false);
+            }
+            userRepository.save(user);
+        });
+
+
+    }
+}

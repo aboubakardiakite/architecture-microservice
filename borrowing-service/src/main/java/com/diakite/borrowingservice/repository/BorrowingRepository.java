@@ -11,4 +11,8 @@ public interface BorrowingRepository extends JpaRepository<Borrowing, Long> {
     List<Borrowing> findByUserId(Long userId);
     List<Borrowing> findByBookId(Long bookId);
     List<Borrowing> findByUserIdAndReturned(Long userId, boolean returned);
-} 
+
+    void deleteByBookId(Long bookId);
+
+    void deleteByUserId(Long userId);
+}

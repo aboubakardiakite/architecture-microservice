@@ -43,4 +43,13 @@ public class BookController {
         bookService.deleteBook(id);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/{id}/available")
+    public ResponseEntity<Boolean> isBookAvailable(@PathVariable Long id) {
+        Book book = bookService.getBookById(id);
+        if (book != null) {
+            return ResponseEntity.ok(book.isAvailable());
+        }
+        return ResponseEntity.notFound().build();
+    }
 } 

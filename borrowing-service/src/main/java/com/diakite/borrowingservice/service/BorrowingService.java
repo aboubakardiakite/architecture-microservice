@@ -1,6 +1,10 @@
 package com.diakite.borrowingservice.service;
 
+import com.diakite.borrowingservice.client.RestClient;
+import com.diakite.borrowingservice.dto.BookDTO;
+import com.diakite.borrowingservice.dto.UserDTO;
 import com.diakite.borrowingservice.entity.Borrowing;
+import com.diakite.borrowingservice.kafka.BorrowingKafkaProducer;
 import com.diakite.borrowingservice.repository.BorrowingRepository;
 import com.diakite.borrowingservice.dto.BorrowingResponseDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +25,11 @@ public class BorrowingService {
     private RestTemplate restTemplate;
 
     @Autowired
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    BorrowingKafkaProducer borrowingKafkaProducer;
+
+
+    @Autowired
+    RestClient restClient;
 
     public List<BorrowingResponseDTO> getAllBorrowings() {
         return borrowingRepository.findAll().stream()
@@ -37,17 +45,14 @@ public class BorrowingService {
 
     public BorrowingResponseDTO createBorrowing(Borrowing borrowing) {
         // Vérifier la disponibilité du livre via book-service
-        Boolean isAvailable = restTemplate.getForObject(
-                "http://book-service/api/v1/book/" + borrowing.getBookId() + "/available",
-                Boolean.class
-        );
+        Boolean isAvailable = restClient.checkBookAvailability(borrowing.getBookId());
+
+        System.out.println("BorrowingController.createBorrowing"+isAvailable);
+
 
         if (Boolean.TRUE.equals(isAvailable)) {
             // Vérifier si l'utilisateur peut emprunter via user-service
-            Boolean canBorrow = restTemplate.getForObject(
-                    "http://user-service/api/v1/user/" + borrowing.getUserId() + "/can-borrow",
-                    Boolean.class
-            );
+            Boolean canBorrow = restClient.checkUserCanBorrow(borrowing.getUserId());
 
             if (Boolean.TRUE.equals(canBorrow)) {
                 Borrowing newBorrowing = new Borrowing.BorrowingBuilder()
@@ -57,9 +62,8 @@ public class BorrowingService {
                 
                 Borrowing savedBorrowing = borrowingRepository.save(newBorrowing);
                 
-                // Notifier les autres services via Kafka
-                kafkaTemplate.send("borrowing-events", "CREATE", savedBorrowing);
-                
+
+                borrowingKafkaProducer.sendBorrowingCreateEvent(savedBorrowing.getId(), savedBorrowing.getUserId(), savedBorrowing.getBookId());
                 return enrichBorrowingWithUserAndBookDetails(savedBorrowing);
             }
         }
@@ -67,31 +71,29 @@ public class BorrowingService {
     }
 
     public BorrowingResponseDTO returnBook(Long id) {
+
         return borrowingRepository.findById(id)
                 .map(borrowing -> {
-                    borrowing.setReturned(true);
-                    Borrowing updatedBorrowing = borrowingRepository.save(borrowing);
-                    
-                    // Notifier les autres services via Kafka
-                    kafkaTemplate.send("borrowing-events", "RETURN", updatedBorrowing);
-                    
-                    return enrichBorrowingWithUserAndBookDetails(updatedBorrowing);
+
+                    deleteUserBorrowings(borrowing.getUserId());
+
+                    borrowingKafkaProducer.sendBorrowingReturnEvent( borrowing.getUserId(), borrowing.getBookId());
+                    borrowingKafkaProducer.sendBorrowingDeleteEvent(borrowing.getBookId());
+
+                    return enrichBorrowingWithUserAndBookDetails(borrowing);
                 })
                 .orElse(null);
     }
 
+
+
+
     private BorrowingResponseDTO enrichBorrowingWithUserAndBookDetails(Borrowing borrowing) {
         // Récupérer les détails de l'utilisateur
-        var user = restTemplate.getForObject(
-                "http://user-service/api/v1/user/" + borrowing.getUserId(),
-                Object.class
-        );
+        UserDTO user = restClient.getUser(borrowing.getUserId());
 
         // Récupérer les détails du livre
-        var book = restTemplate.getForObject(
-                "http://book-service/api/v1/book/" + borrowing.getBookId(),
-                Object.class
-        );
+        BookDTO book = restClient.getBook(borrowing.getBookId());
 
         BorrowingResponseDTO dto = new BorrowingResponseDTO();
         dto.setId(borrowing.getId());
@@ -102,13 +104,31 @@ public class BorrowingService {
         dto.setReturned(borrowing.isReturned());
         
         if (user != null) {
-            dto.setUserName(((java.util.Map)user).get("name").toString());
+            dto.setUserName(user.getName());
         }
         
         if (book != null) {
-            dto.setBookTitle(((java.util.Map)book).get("title").toString());
+            dto.setBookTitle(book.getTitle());
         }
 
         return dto;
     }
-} 
+
+    public void deleteBorrowingsByBookId(Long bookId) {
+
+        borrowingRepository.findByBookId(bookId).forEach(borrowing -> {
+            borrowingRepository.delete(borrowing);
+            borrowingKafkaProducer.sendBorrowingReturnEvent(borrowing.getUserId(),borrowing.getBookId());
+        });
+
+    }
+
+    public void deleteUserBorrowings(Long userId) {
+
+        borrowingRepository.findByUserId(userId).forEach(borrowing -> {
+            borrowingRepository.delete(borrowing);
+            borrowingKafkaProducer.sendBorrowingDeleteEvent(borrowing.getBookId());
+        });
+
+    }
+}
