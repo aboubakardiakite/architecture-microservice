@@ -30,7 +30,7 @@ public class BookService {
     public Book createBook(BookDTO book) {
         Book book1 = new Book();
         book1.setAuthor(book.getAuthor());
-        book1.setAvailable(book.isAvailable());
+        book1.setAvailable(true);
         book1.setCategory(book.getCategory());
         book1.setTitle(book.getTitle());
 

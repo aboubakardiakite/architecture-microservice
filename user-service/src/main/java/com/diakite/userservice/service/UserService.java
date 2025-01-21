@@ -1,9 +1,9 @@
 package com.diakite.userservice.service;
 
 import com.diakite.userservice.entity.User;
+import com.diakite.userservice.entity.MembershipType;
 import com.diakite.userservice.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,9 +14,6 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private KafkaTemplate<String, Object> kafkaTemplate;
-
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
@@ -26,10 +23,14 @@ public class UserService {
     }
 
     public User createUser(User user) {
+        int maxBooks = (user.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
+        
         User newUser = new User.UserBuilder()
                 .name(user.getName())
                 .email(user.getEmail())
+                .membershipType(user.getMembershipType())
                 .build();
+                
         return userRepository.save(newUser);
     }
 
@@ -38,29 +39,40 @@ public class UserService {
                 .map(existingUser -> {
                     existingUser.setName(user.getName());
                     existingUser.setEmail(user.getEmail());
-                    existingUser.setBlocked(user.isBlocked());
-                    existingUser.setMaxBooksAllowed(user.getMaxBooksAllowed());
+                    existingUser.setMembershipType(user.getMembershipType());
+                    existingUser.setLocked(user.isLocked());
                     existingUser.setCurrentBorrowedBooks(user.getCurrentBorrowedBooks());
+                    
+                    // Mise à jour du nombre max d'emprunts selon le type d'adhésion
+                    int maxBooks = (user.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
+                    existingUser.setNombreMaxEmprunt(maxBooks);
+                    
                     return userRepository.save(existingUser);
                 })
                 .orElse(null);
     }
 
     public void deleteUser(Long id) {
-        userRepository.findById(id).ifPresent(user -> {
-            userRepository.delete(user);
-            // Envoyer un message Kafka pour supprimer les emprunts associés
-            kafkaTemplate.send("user-events", "DELETE", id);
-        });
+        userRepository.deleteById(id);
     }
 
-    public void updateBorrowingStatus(Long id) {
-        userRepository.findById(id).ifPresent(user -> {
+    public boolean canBorrow(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> !user.isLocked() && 
+                     user.getCurrentBorrowedBooks() < user.getNombreMaxEmprunt())
+                .orElse(false);
+    }
+
+    public void updateBorrowingStatus(Long userId) {
+        userRepository.findById(userId).ifPresent(user -> {
             int currentBooks = user.getCurrentBorrowedBooks() + 1;
             user.setCurrentBorrowedBooks(currentBooks);
-            if (currentBooks >= user.getMaxBooksAllowed()) {
-                user.setBlocked(true);
+            
+            // Vérifier si l'utilisateur a atteint sa limite
+            if (currentBooks >= user.getNombreMaxEmprunt()) {
+                user.setLocked(true);
             }
+            
             userRepository.save(user);
         });
     }

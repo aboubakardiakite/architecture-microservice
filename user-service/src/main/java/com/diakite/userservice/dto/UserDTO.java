@@ -1,5 +1,6 @@
 package com.diakite.userservice.dto;
 
+import com.diakite.userservice.entity.MembershipType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,7 +12,8 @@ public class UserDTO {
     private Long id;
     private String name;
     private String email;
-    private boolean isBlocked;
-    private int maxBooksAllowed;
-    private int currentBorrowedBooks;
+    private MembershipType membershipType;
+    private boolean isLocked;
+    private Integer nombreMaxEmprunt;
+    private Integer currentBorrowedBooks;
 } 

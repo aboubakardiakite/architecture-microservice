@@ -12,15 +12,20 @@ public class User {
     private Long id;
     private String name;
     private String email;
-    private boolean isBlocked;
-    private int maxBooksAllowed;
-    private int currentBorrowedBooks;
+    
+    @Enumerated(EnumType.STRING)
+    private MembershipType membershipType;
+    
+    private boolean isLocked;
+    private Integer nombreMaxEmprunt;
+    private Integer currentBorrowedBooks;
 
     private User(UserBuilder builder) {
         this.name = builder.name;
         this.email = builder.email;
-        this.isBlocked = builder.isBlocked;
-        this.maxBooksAllowed = builder.maxBooksAllowed;
+        this.membershipType = builder.membershipType;
+        this.isLocked = builder.isLocked;
+        this.nombreMaxEmprunt = builder.nombreMaxEmprunt;
         this.currentBorrowedBooks = builder.currentBorrowedBooks;
     }
 
@@ -30,13 +35,15 @@ public class User {
     public static class UserBuilder {
         private String name;
         private String email;
-        private boolean isBlocked;
-        private int maxBooksAllowed;
-        private int currentBorrowedBooks;
+        private MembershipType membershipType;
+        private boolean isLocked;
+        private Integer nombreMaxEmprunt;
+        private Integer currentBorrowedBooks;
 
         public UserBuilder() {
-            this.maxBooksAllowed = 5; // Valeur par défaut
-            this.isBlocked = false;
+            this.membershipType = MembershipType.REGULAR;
+            this.isLocked = false;
+            this.nombreMaxEmprunt = 5; // Par défaut pour REGULAR
             this.currentBorrowedBooks = 0;
         }
 
@@ -50,17 +57,18 @@ public class User {
             return this;
         }
 
-        public UserBuilder blocked(boolean isBlocked) {
-            this.isBlocked = isBlocked;
+        public UserBuilder membershipType(MembershipType membershipType) {
+            this.membershipType = membershipType;
+            this.nombreMaxEmprunt = (membershipType == MembershipType.PREMIUM) ? 7 : 5;
             return this;
         }
 
-        public UserBuilder maxBooksAllowed(int maxBooksAllowed) {
-            this.maxBooksAllowed = maxBooksAllowed;
+        public UserBuilder locked(boolean isLocked) {
+            this.isLocked = isLocked;
             return this;
         }
 
-        public UserBuilder currentBorrowedBooks(int currentBorrowedBooks) {
+        public UserBuilder currentBorrowedBooks(Integer currentBorrowedBooks) {
             this.currentBorrowedBooks = currentBorrowedBooks;
             return this;
         }
