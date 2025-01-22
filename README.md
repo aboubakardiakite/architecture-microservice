@@ -6,9 +6,9 @@ Système de gestion de bibliothèque basé sur une architecture microservices pe
 ## Architecture
 - **Config Server** (port: 8880) : Configuration centralisée
 - **Discovery Server** (port: 8761) : Service discovery avec Eureka
-- **Book Service** (port: 8082) : Gestion des livres
+- **Book Service** (port: 9090) : Gestion des livres
 - **User Service** (port: 9092) : Gestion des utilisateurs
-- **Borrowing Service** (port: 8083) : Gestion des emprunts
+- **Borrowing Service** (port: 9091) : Gestion des emprunts
 
 ## Technologies
 - Java 17
@@ -22,9 +22,9 @@ Système de gestion de bibliothèque basé sur une architecture microservices pe
 
 ## API Documentation
 Swagger UI disponible pour chaque service :
-- Book Service : http://localhost:8082/swagger-ui.html
+- Book Service : http://localhost:9090/swagger-ui.html
 - User Service : http://localhost:9092/swagger-ui.html
-- Borrowing Service : http://localhost:8083/swagger-ui.html
+- Borrowing Service : http://localhost:9091/swagger-ui.html
 
 ## Endpoints Principaux
 
