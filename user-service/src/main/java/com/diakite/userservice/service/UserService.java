@@ -7,6 +7,7 @@ import com.diakite.userservice.kafka.UserKafkaProducer;
 import com.diakite.userservice.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -33,6 +34,7 @@ public class UserService {
         return userRepository.findById(id).orElse(null);
     }
 
+    @Transactional
     public User createUser(User user) {
 
         User newUser = new User.UserBuilder()
@@ -44,6 +46,7 @@ public class UserService {
         return userRepository.save(newUser);
     }
 
+    @Transactional
     public User updateUser(Long id, User user) {
         return userRepository.findById(id)
                 .map(existingUser -> {
@@ -64,13 +67,13 @@ public class UserService {
                 .orElse(null);
     }
 
+    @Transactional
     public void deleteUser(Long id) {
-
         userRepository.findById(id).ifPresent(user -> {
             userRepository.deleteUserById(user.getId());
-            kafkaProducer.sendUserDeleteEvent(id);
         });
-
+        
+        kafkaProducer.sendUserDeleteEvent(id);
     }
 
     public boolean canBorrow(Long userId) {
@@ -90,6 +93,7 @@ public class UserService {
                 user.setLocked(true);
             }
             
+        
             userRepository.save(user);
         });
     }
