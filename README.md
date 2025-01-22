@@ -85,9 +85,9 @@ cd borrowing-service && mvn spring-boot:run
 ## Monitoring
 - Eureka : http://localhost:8761
 - H2 Console :
-  - Book Service : http://localhost:8082/h2-console
+  - Book Service : http://localhost:9090/h2-console
   - User Service : http://localhost:9092/h2-console
-  - Borrowing Service : http://localhost:8083/h2-console
+  - Borrowing Service : http://localhost:9091/h2-console
 
 ## Design Patterns
 - Builder (User, Book, Borrowing)
