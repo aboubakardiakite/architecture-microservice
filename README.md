@@ -77,6 +77,63 @@ cd user-service && mvn spring-boot:run
 cd borrowing-service && mvn spring-boot:run
 ```
 
+## Docker Compose
+
+1. Lancer les services avec Docker Compose :
+```bash
+# Démarrer tous les services
+docker-compose up -d
+
+# Vérifier que les conteneurs sont bien démarrés
+docker-compose ps
+```
+
+2. Arrêter les services :
+```bash
+docker-compose down
+```
+
+## Configuration Kafka
+
+1. Accéder au conteneur Kafka :
+```bash
+docker exec -it kafka bash
+```
+
+2. Créer les topics nécessaires :
+```bash
+# Créer le topic borrowing-events
+kafka-topics --create \
+    --bootstrap-server localhost:9093 \
+    --topic borrowing-events \
+    --partitions 1 \
+    --replication-factor 1
+
+# Créer le topic user-events
+kafka-topics --create \
+    --bootstrap-server localhost:9093 \
+    --topic user-events \
+    --partitions 1 \
+    --replication-factor 1
+
+# Créer le topic book-events
+kafka-topics --create \
+    --bootstrap-server localhost:9093 \
+    --topic book-events \
+    --partitions 1 \
+    --replication-factor 1
+
+# Vérifier la création des topics
+kafka-topics --list --bootstrap-server localhost:9093
+```
+
+3. Pour surveiller les messages dans un topic :
+```bash
+kafka-console-consumer --bootstrap-server localhost:9093 \
+    --topic borrowing-events \
+    --from-beginning
+```
+
 ## Kafka Topics
 - borrowing-events : Événements d'emprunt
 - user-events : Événements utilisateur
