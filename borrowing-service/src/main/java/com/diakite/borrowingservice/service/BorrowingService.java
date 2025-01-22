@@ -7,10 +7,12 @@ import com.diakite.borrowingservice.entity.Borrowing;
 import com.diakite.borrowingservice.kafka.BorrowingKafkaProducer;
 import com.diakite.borrowingservice.repository.BorrowingRepository;
 import com.diakite.borrowingservice.dto.BorrowingResponseDTO;
+import com.diakite.borrowingservice.exception.BorrowingNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -38,51 +40,47 @@ public class BorrowingService {
     }
 
     public BorrowingResponseDTO getBorrowingById(Long id) {
-        return borrowingRepository.findById(id)
-                .map(this::enrichBorrowingWithUserAndBookDetails)
-                .orElse(null);
+        Borrowing borrowing = borrowingRepository.findById(id)
+            .orElseThrow(() -> new BorrowingNotFoundException("Emprunt non trouvé avec l'ID: " + id));
+        return enrichBorrowingWithUserAndBookDetails(borrowing);
     }
 
     public BorrowingResponseDTO createBorrowing(Borrowing borrowing) {
         // Vérifier la disponibilité du livre via book-service
         Boolean isAvailable = restClient.checkBookAvailability(borrowing.getBookId());
 
-        System.out.println("BorrowingController.createBorrowing"+isAvailable);
-
-
-        if (Boolean.TRUE.equals(isAvailable)) {
-            // Vérifier si l'utilisateur peut emprunter via user-service
-            Boolean canBorrow = restClient.checkUserCanBorrow(borrowing.getUserId());
-
-            if (Boolean.TRUE.equals(canBorrow)) {
-                Borrowing newBorrowing = new Borrowing.BorrowingBuilder()
-                        .userId(borrowing.getUserId())
-                        .bookId(borrowing.getBookId())
-                        .build();
-                
-                Borrowing savedBorrowing = borrowingRepository.save(newBorrowing);
-                
-
-                borrowingKafkaProducer.sendBorrowingCreateEvent(savedBorrowing.getId(), savedBorrowing.getUserId(), savedBorrowing.getBookId());
-                return enrichBorrowingWithUserAndBookDetails(savedBorrowing);
-            }
+        if (!Boolean.TRUE.equals(isAvailable)) {
+            throw new IllegalStateException("Le livre n'est pas disponible pour l'emprunt.");
         }
-        return null;
+
+        // Vérifier si l'utilisateur peut emprunter via user-service
+        Boolean canBorrow = restClient.checkUserCanBorrow(borrowing.getUserId());
+
+        if (!Boolean.TRUE.equals(canBorrow)) {
+            throw new IllegalStateException("L'utilisateur ne peut pas emprunter de livre pour le moment.");
+        }
+
+        Borrowing newBorrowing = new Borrowing.BorrowingBuilder()
+                .userId(borrowing.getUserId())
+                .bookId(borrowing.getBookId())
+                .build();
+        
+        Borrowing savedBorrowing = borrowingRepository.save(newBorrowing);
+        
+        borrowingKafkaProducer.sendBorrowingCreateEvent(savedBorrowing.getId(), savedBorrowing.getUserId(), savedBorrowing.getBookId());
+        return enrichBorrowingWithUserAndBookDetails(savedBorrowing);
     }
 
+    @Transactional
     public BorrowingResponseDTO returnBook(Long id) {
+        Borrowing borrowing = borrowingRepository.findById(id)
+            .orElseThrow(() -> new BorrowingNotFoundException("Emprunt non trouvé avec l'ID: " + id));
 
-        return borrowingRepository.findById(id)
-                .map(borrowing -> {
-
-                    deleteUserBorrowings(borrowing.getUserId());
-
-                    borrowingKafkaProducer.sendBorrowingReturnEvent( borrowing.getUserId(), borrowing.getBookId());
-                    borrowingKafkaProducer.sendBorrowingDeleteEvent(borrowing.getBookId());
-
-                    return enrichBorrowingWithUserAndBookDetails(borrowing);
-                })
-                .orElse(null);
+        borrowing.setReturned(true);
+        borrowingRepository.save(borrowing);
+        
+        borrowingKafkaProducer.sendBorrowingReturnEvent(borrowing.getUserId(), borrowing.getBookId());
+        return enrichBorrowingWithUserAndBookDetails(borrowing);
     }
 
 
@@ -114,13 +112,13 @@ public class BorrowingService {
         return dto;
     }
 
+    @Transactional
     public void deleteBorrowingsByBookId(Long bookId) {
-
-        borrowingRepository.findByBookId(bookId).forEach(borrowing -> {
+        List<Borrowing> borrowings = borrowingRepository.findByBookId(bookId);
+        borrowings.forEach(borrowing -> {
             borrowingRepository.delete(borrowing);
-            borrowingKafkaProducer.sendBorrowingReturnEvent(borrowing.getUserId(),borrowing.getBookId());
+            borrowingKafkaProducer.sendBorrowingReturnEvent(borrowing.getUserId(), borrowing.getBookId());
         });
-
     }
 
     public void deleteUserBorrowings(Long userId) {

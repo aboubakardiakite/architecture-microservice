@@ -2,10 +2,12 @@ package com.diakite.bookservice.service;
 
 import com.diakite.bookservice.dto.BookDTO;
 import com.diakite.bookservice.entity.Book;
+import com.diakite.bookservice.exception.BookNotFoundException;
 import com.diakite.bookservice.kafka.BookKafkaProducer;
 import com.diakite.bookservice.repository.BookRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -23,7 +25,8 @@ public class BookService {
     }
 
     public Book getBookById(Long id) {
-        return bookRepository.findById(id).orElse(null);
+        return bookRepository.findById(id)
+            .orElseThrow(() -> new BookNotFoundException("Livre non trouvé avec l'ID: " + id));
     }
 
     public Book createBook(BookDTO bookDTO) {
@@ -35,29 +38,33 @@ public class BookService {
         return bookRepository.save(book);
     }
 
-    public Book updateBook(Long id, Book book) {
-        return bookRepository.findById(id)
-                .map(existingBook -> {
-                    existingBook.setTitle(book.getTitle());
-                    existingBook.setAuthor(book.getAuthor());
-                    existingBook.setCategory(book.getCategory());
-                    existingBook.setAvailable(book.isAvailable());
-                    return bookRepository.save(existingBook);
-                })
-                .orElse(null);
+    @Transactional
+    public void deleteBook(Long id) {
+        Book book = bookRepository.findById(id)
+            .orElseThrow(() -> new BookNotFoundException("Livre non trouvé avec l'ID: " + id));
+            
+        bookRepository.delete(book);
+        kafkaProducer.sendBookDeleteEvent(id);
     }
 
-    public void deleteBook(Long id) {
-        bookRepository.findById(id).ifPresent(book -> {
-            bookRepository.delete(book);
-            kafkaProducer.sendBookDeleteEvent(id);
-        });
+    @Transactional
+    public Book updateBook(Long id, Book bookDetails) {
+        return bookRepository.findById(id)
+            .map(book -> {
+                book.setTitle(bookDetails.getTitle());
+                book.setAuthor(bookDetails.getAuthor());
+                book.setCategory(bookDetails.getCategory());
+                book.setAvailable(bookDetails.isAvailable());
+                return bookRepository.save(book);
+            })
+            .orElseThrow(() -> new BookNotFoundException("Livre non trouvé avec l'ID: " + id));
     }
 
     public void updateBookAvailability(Long id, boolean isAvailable) {
-        bookRepository.findById(id).ifPresent(book -> {
-            book.setAvailable(isAvailable);
-            bookRepository.save(book);
-        });
+        Book book = bookRepository.findById(id)
+            .orElseThrow(() -> new BookNotFoundException("Livre non trouvé avec l'ID: " + id));
+            
+        book.setAvailable(isAvailable);
+        bookRepository.save(book);
     }
 } 

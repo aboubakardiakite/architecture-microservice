@@ -5,6 +5,7 @@ import com.diakite.userservice.entity.User;
 import com.diakite.userservice.entity.MembershipType;
 import com.diakite.userservice.kafka.UserKafkaProducer;
 import com.diakite.userservice.repository.UserRepository;
+import com.diakite.userservice.exception.UserNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,8 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        return userRepository.findById(id).orElse(null);
+        return userRepository.findById(id)
+            .orElseThrow(() -> new UserNotFoundException("Utilisateur non trouvé avec l'ID: " + id));
     }
 
     @Transactional
@@ -47,40 +49,40 @@ public class UserService {
     }
 
     @Transactional
-    public User updateUser(Long id, User user) {
+    public User updateUser(Long id, User userDetails) {
         return userRepository.findById(id)
-                .map(existingUser -> {
-                    existingUser.setName(user.getName());
-                    existingUser.setEmail(user.getEmail());
-                    existingUser.setMembershipType(user.getMembershipType());
-                    existingUser.setLocked(user.isLocked());
-                    existingUser.setCurrentBorrowedBooks(user.getCurrentBorrowedBooks());
-                    
-                    // Mise à jour du nombre max d'emprunts selon le type d'adhésion
-                    int maxBooks = (user.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
-                    existingUser.setNombreMaxEmprunt(maxBooks);
+            .map(user -> {
+                user.setName(userDetails.getName());
+                user.setEmail(userDetails.getEmail());
+                user.setMembershipType(userDetails.getMembershipType());
+                user.setLocked(userDetails.isLocked());
+                user.setCurrentBorrowedBooks(userDetails.getCurrentBorrowedBooks());
+                
+                // Mise à jour du nombre max d'emprunts selon le type d'adhésion
+                int maxBooks = (userDetails.getMembershipType() == MembershipType.PREMIUM) ? 7 : 5;
+                user.setNombreMaxEmprunt(maxBooks);
 
-                    userKafkaProducer.sendUserUpdateEvent(id);
+                userKafkaProducer.sendUserUpdateEvent(id);
 
-                    return userRepository.save(existingUser);
-                })
-                .orElse(null);
+                return userRepository.save(user);
+            })
+            .orElseThrow(() -> new UserNotFoundException("Utilisateur non trouvé avec l'ID: " + id));
     }
 
     @Transactional
     public void deleteUser(Long id) {
-        userRepository.findById(id).ifPresent(user -> {
-            userRepository.deleteUserById(user.getId());
-        });
-        
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new UserNotFoundException("Utilisateur non trouvé avec l'ID: " + id));
+            
+        userRepository.deleteUserById(user.getId());
         kafkaProducer.sendUserDeleteEvent(id);
     }
 
-    public boolean canBorrow(Long userId) {
-        return userRepository.findById(userId)
-                .map(user -> !user.isLocked() && 
-                     user.getCurrentBorrowedBooks() < user.getNombreMaxEmprunt())
-                .orElse(false);
+    public boolean canBorrow(Long id) {
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new UserNotFoundException("Utilisateur non trouvé avec l'ID: " + id));
+            
+        return !user.isLocked() && user.getCurrentBorrowedBooks() < user.getNombreMaxEmprunt();
     }
 
     public void updateBorrowingStatus(Long userId) {
